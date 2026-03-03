@@ -33,42 +33,63 @@ def signup(request):
 
 def statistics_view(request):
     matplotlib.use('Agg')
-    # Obtener todas las películas
-    all_movies = Movie.objects.all()
-    # Crear un diccionario para almacenar la cantidad de películas por año
-    movie_counts_by_year = {}
-    # Filtrar las películas por año y contar la cantidad de películas por año
-    for movie in all_movies:
-        year = movie.year if movie.year else "None"
-        if year in movie_counts_by_year:
-            movie_counts_by_year[year] += 1
-        else:
-            movie_counts_by_year[year] = 1
-    # Ancho de las barras
-    bar_width = 0.5
-    # Posiciones de las barras
-    bar_positions = range(len(movie_counts_by_year))
-    # Crear la gráfica de barras
-    plt.bar(bar_positions, movie_counts_by_year.values(), width=bar_width, align='center')
-    # Personalizar la gráfica
+    from django.db.models import Count
+    from collections import Counter
+
+    data_year = Movie.objects.values('year').annotate(total=Count('year')).order_by('year')
+
+    years = [item['year'] if item['year'] else "None" for item in data_year]
+    totals_year = [item['total'] for item in data_year]
+
+    plt.figure()
+    plt.bar(range(len(years)), totals_year)
     plt.title('Movies per year')
     plt.xlabel('Year')
     plt.ylabel('Number of movies')
-    plt.xticks(bar_positions, movie_counts_by_year.keys(), rotation=90)
-    # Ajustar el espaciado entre las barras
+    plt.xticks(range(len(years)), years, rotation=90)
     plt.subplots_adjust(bottom=0.3)
-    # Guardar la gráfica en un objeto BytesIO
-    buffer = io.BytesIO()
-    plt.savefig(buffer, format='png')
-    buffer.seek(0)
+
+    buffer_year = io.BytesIO()
+    plt.savefig(buffer_year, format='png')
+    buffer_year.seek(0)
     plt.close()
-    28# Convertir la gráfica a base64
-    image_png = buffer.getvalue()
-    buffer.close()
-    graphic = base64.b64encode(image_png)
-    graphic = graphic.decode('utf-8')
-    # Renderizar la plantilla statistics.html con la gráfica
-    return render(request, 'statistics.html', {'graphic': graphic})
 
+    graphic_year = base64.b64encode(buffer_year.getvalue()).decode()
+    buffer_year.close()
 
-# Create your views here.
+    
+    all_movies = Movie.objects.all()
+    genre_counter = Counter()
+
+    for movie in all_movies:
+        if movie.genre:
+            genres = movie.genre.split(',')
+            for g in genres:
+                genre_counter[g.strip()] += 1
+
+  
+    top_genres = genre_counter.most_common(10)
+
+    genres = [item[0] for item in top_genres]
+    totals_genre = [item[1] for item in top_genres]
+
+    plt.figure()
+    plt.bar(range(len(genres)), totals_genre)
+    plt.title('Top 10 Movies per genre')
+    plt.xlabel('Genre')
+    plt.ylabel('Number of movies')
+    plt.xticks(range(len(genres)), genres, rotation=45)
+    plt.subplots_adjust(bottom=0.3)
+
+    buffer_genre = io.BytesIO()
+    plt.savefig(buffer_genre, format='png')
+    buffer_genre.seek(0)
+    plt.close()
+
+    graphic_genre = base64.b64encode(buffer_genre.getvalue()).decode()
+    buffer_genre.close()
+
+    return render(request, 'statistics.html', {
+        'graphic_year': graphic_year,
+        'graphic_genre': graphic_genre
+    })
